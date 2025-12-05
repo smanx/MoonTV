@@ -62,6 +62,7 @@ function PlayPageClient() {
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<SearchResult | null>(null);
   const [isDanmakuPluginReady, setIsDanmakuPluginReady] = useState(false);
+  const [isDanmakuLoading, setIsDanmakuLoading] = useState(false);
 
 
   // 收藏状态
@@ -178,48 +179,20 @@ function PlayPageClient() {
   useEffect(() => {
     if (!selectedDanmakuAnime || !detail || !isDanmakuPluginReady) return;
   
-    const currentEpisode = currentEpisodeIndex + 1;
     const currentEpisodeTitle = detail?.episodes_titles?.[currentEpisodeIndex];
     if (!currentEpisodeTitle) return;
-  
-    const extractedNumber = extractEpisodeNumber(currentEpisodeTitle);
   
     let matchedEpisode: any = null;
   
     /** ① 用户手动选择某一集（权重大最高） */
     if (selectedDanmakuEpisode !== undefined && selectedState) {
       matchedEpisode = selectedDanmakuAnime.episodes[selectedDanmakuEpisode - 1];
-      setAutoDanmakuEnabled(false);
       setSelectedState(false);
     }
   
     /** ② 自动匹配模式：直接使用第 0 集 */
     else if (autoDanmakuEnabled) {
       matchedEpisode = selectedDanmakuAnime.episodes[0];
-    }
-  
-    /** ③ 普通模式：标题匹配 → 集数匹配 → 索引兜底 */
-    else {
-      // 1. 完全匹配标题
-      matchedEpisode = selectedDanmakuAnime.episodes.find(
-        (ep) => ep.episodeTitle === currentEpisodeTitle
-      );
-  
-      // 2. 按提取的集数匹配
-      if (!matchedEpisode && extractedNumber !== null) {
-        matchedEpisode = selectedDanmakuAnime.episodes.find((ep) => {
-          const epNumber = extractEpisodeNumber(ep.episodeTitle);
-          return epNumber === extractedNumber;
-        });
-      }
-  
-      // 3. 根据当前索引兜底
-      if (
-        !matchedEpisode &&
-        currentEpisode <= selectedDanmakuAnime.episodes.length
-      ) {
-        matchedEpisode = selectedDanmakuAnime.episodes[currentEpisode - 1];
-      }
     }
   
     if (!matchedEpisode) return;
@@ -927,6 +900,7 @@ function PlayPageClient() {
     if (!autoDanmakuEnabled || !detail || !isDanmakuPluginReady) return;
 
     (async () => {
+      setIsDanmakuLoading(true);
       try {
         const title = videoTitleRef.current;
 
@@ -973,6 +947,8 @@ function PlayPageClient() {
         }
       } catch (err) {
         console.error("初始化自动加载弹幕失败:", err);
+      } finally {
+        setIsDanmakuLoading(false);
       }
     })();
   }, [currentEpisodeIndex, autoDanmakuEnabled, isDanmakuPluginReady]);
@@ -1102,14 +1078,6 @@ function PlayPageClient() {
       newUrl.searchParams.set('year', newDetail.year);
       window.history.replaceState({}, '', newUrl.toString());
 
-      // 在更新视频源之前销毁当前播放器实例
-      if (artPlayerRef.current) {
-        if (artPlayerRef.current.video && artPlayerRef.current.video.hls) {
-          artPlayerRef.current.video.hls.destroy();
-        }
-        artPlayerRef.current.destroy();
-        artPlayerRef.current = null;
-      }
 
       setVideoTitle(newDetail.title || newTitle);
       setVideoYear(newDetail.year);
@@ -2163,9 +2131,10 @@ function PlayPageClient() {
                 ></div>
 
                 {/* 弹幕选择器 */}
-                <div style={{ display: showDanmakuSelector ? 'block' : 'none' }}>
+                {showDanmakuSelector && (
                   <DanmakuSelector
                     videoTitle={videoTitle}
+                    isVisible={showDanmakuSelector}
                     currentEpisode={currentEpisodeIndex + 1}
                     currentEpisodeTitle={
                       detail?.episodes_titles?.[currentEpisodeIndex]
@@ -2193,7 +2162,7 @@ function PlayPageClient() {
                       }
                     }}
                   />
-                </div>
+                )}
 
                 {/* 换源加载蒙层 */}
                 {isVideoLoading && (
@@ -2231,6 +2200,14 @@ function PlayPageClient() {
                             : '🔄 视频加载中...'}
                         </p>
                       </div>
+                    </div>
+                  </div>
+                )}
+                {/* 弹幕加载提示 */}
+                {isDanmakuLoading && (
+                  <div className="absolute top-4 left-4 right-4 z-[400] flex justify-center">
+                    <div className="bg-gray-800/90 text-white px-4 py-2 rounded-lg shadow-lg">
+                      正在自动加载弹幕...
                     </div>
                   </div>
                 )}
